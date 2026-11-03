@@ -1,0 +1,941 @@
+<!doctype html>
+<html lang="mn">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>Салбарын багц 3D (демо)</title>
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='9' fill='%2317263D'/%3E%3Cpath d='M9 24V15M16 24V8M23 24V12' stroke='%2338BDF8' stroke-width='3.2' stroke-linecap='round'/%3E%3C/svg%3E">
+<link rel="stylesheet" href="vendor/maplibre-gl.css">
+<style>
+:root{
+  --bg:#070d19; --glass:rgba(12,22,40,.74); --glass2:rgba(18,32,56,.86); --line:rgba(140,180,230,.16); --line2:rgba(140,180,230,.28);
+  --t1:#f3f6fb; --t2:#b9c6d8; --t3:#7f8ea3; --acc:#38bdf8; --acc2:#7dd3fc;
+  --good:#0ca30c; --warn:#fab219; --ser:#ec835a; --crit:#d03b3b;
+  --s1:#3987e5; --grid:rgba(160,190,230,.12);
+}
+*{box-sizing:border-box}
+html,body{margin:0;height:100%;background:var(--bg);color:var(--t1);font:13px/1.4 "Inter","Segoe UI",system-ui,sans-serif;overflow:hidden}
+button,input{font:inherit;color:inherit}
+#map{position:absolute;inset:0}
+.vignette{position:absolute;inset:0;pointer-events:none;background:radial-gradient(ellipse at 50% 45%,transparent 55%,rgba(3,7,15,.55) 100%)}
+.glass{background:var(--glass);backdrop-filter:blur(14px) saturate(1.3);-webkit-backdrop-filter:blur(14px) saturate(1.3);border:1px solid var(--line);border-radius:14px;box-shadow:0 10px 40px rgba(0,0,0,.35)}
+.maplibregl-ctrl-attrib{background:rgba(7,13,25,.6)!important;color:var(--t3)!important;font-size:10px}
+.maplibregl-ctrl-attrib a{color:var(--t2)!important}
+.maplibregl-ctrl-bottom-right{bottom:0}
+
+/* top bar */
+.top{position:absolute;top:12px;left:12px;right:12px;display:flex;gap:10px;align-items:center;padding:8px 10px;z-index:5;flex-wrap:wrap}
+.brand{display:flex;gap:9px;align-items:center;cursor:pointer;padding-right:6px;border:0;background:none}
+.brand svg{width:30px;height:30px;flex:none}
+.brand b{display:block;font-size:14px;letter-spacing:.2px}
+.brand em{display:block;font-style:normal;color:var(--t3);font-size:11px}
+.search{position:relative;flex:1 1 130px;max-width:300px}
+@media (max-width:1650px) and (min-width:901px){.grp>span{display:none}.brand em{max-width:190px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}}
+.search input{width:100%;background:rgba(255,255,255,.05);border:1px solid var(--line);border-radius:10px;padding:7px 10px;outline:none}
+.search input:focus{border-color:var(--acc)}
+.results{position:absolute;top:110%;left:0;right:0;max-height:300px;overflow:auto;padding:4px;z-index:20}
+.results button{display:flex;justify-content:space-between;width:100%;text-align:left;background:none;border:0;padding:7px 9px;border-radius:8px;cursor:pointer;gap:8px}
+.results button:hover,.results button.on{background:rgba(56,189,248,.14)}
+.results small{color:var(--t3)}
+.seg{display:inline-flex;background:rgba(255,255,255,.04);border:1px solid var(--line);border-radius:10px;padding:2px}
+.seg button{background:none;border:0;padding:5px 10px;border-radius:8px;cursor:pointer;color:var(--t2);white-space:nowrap}
+.seg button.on{background:rgba(56,189,248,.18);color:var(--t1);box-shadow:inset 0 0 0 1px rgba(56,189,248,.45)}
+.seg button:hover:not(.on){color:var(--t1)}
+.grp{display:flex;align-items:center;gap:6px}
+.grp>span{color:var(--t3);font-size:11px}
+.sp{flex:1}
+.ib{background:rgba(255,255,255,.05);border:1px solid var(--line);border-radius:10px;width:34px;height:32px;cursor:pointer;display:inline-grid;place-items:center;color:var(--t2)}
+.ib:hover{color:var(--t1);border-color:var(--line2)}
+.ib.on{color:var(--acc);border-color:rgba(56,189,248,.5)}
+.asof{color:var(--t3);font-size:11px;white-space:nowrap}
+.demo{flex:none;font-size:11px;font-weight:600;letter-spacing:.3px;color:#1a1204;background:#fab219;border-radius:20px;padding:3px 10px;white-space:nowrap}
+/* HTML шошго (glyph татахгүй) */
+.lbls{position:absolute;inset:0;pointer-events:none;overflow:hidden;z-index:1;transition:opacity .4s}
+.mlb{position:absolute;left:0;top:0;white-space:nowrap;text-align:center;color:#eaf3ff;font-size:11.5px;line-height:1.2;text-shadow:0 0 3px rgba(5,10,20,.95),0 0 2px rgba(5,10,20,.95),0 1px 2px #050a14;will-change:transform}
+.mlb small{display:block;font-size:10px;color:#c9d8ea}
+.mlb.det{font-size:12px}
+
+/* left list */
+.list{position:absolute;left:12px;top:var(--th,78px);bottom:132px;width:290px;display:flex;flex-direction:column;z-index:4;transition:transform .35s ease}
+.list.hide{transform:translateX(-310px)}
+.lh{display:flex;justify-content:space-between;align-items:center;padding:10px 12px 6px}
+.lh b{font-size:12px;letter-spacing:.4px;color:var(--t2);text-transform:uppercase}
+.lh select{background:rgba(255,255,255,.05);border:1px solid var(--line);color:var(--t2);border-radius:8px;padding:3px 6px;font-size:11px}
+.lh select option{background:#0c1628}
+.rows{overflow:auto;padding:2px 6px 8px;flex:1}
+.row{display:grid;grid-template-columns:18px 1fr auto;gap:2px 8px;align-items:center;padding:6px 7px;border-radius:9px;cursor:pointer;border:1px solid transparent}
+.row:hover{background:rgba(255,255,255,.05)}
+.row.on{background:rgba(56,189,248,.12);border-color:rgba(56,189,248,.35)}
+.row i{width:10px;height:10px;border-radius:3px;display:block}
+.row .nm{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.row .v{color:var(--t2);font-variant-numeric:tabular-nums;font-size:12px}
+.row .bar{grid-column:2/4;height:3px;background:rgba(255,255,255,.06);border-radius:2px;overflow:hidden}
+.row .bar u{display:block;height:100%;background:var(--s1);border-radius:2px;transition:width .6s ease}
+.row.nl .nm{color:var(--t3)}
+.lsub{padding:8px 10px 2px;color:var(--t3);font-size:11px}
+.ltog{position:absolute;left:12px;top:var(--th,78px);z-index:3}
+
+/* bottom dock */
+.dock{position:absolute;left:12px;right:12px;bottom:22px;display:flex;gap:10px;align-items:flex-end;z-index:4;pointer-events:none}
+.dock>*{pointer-events:auto}
+.kpis{display:flex;gap:0;padding:8px 6px}
+.kpi{padding:2px 14px;border-right:1px solid var(--line);min-width:118px}
+.kpi:last-child{border-right:0}
+.kpi span{display:block;color:var(--t3);font-size:11px}
+.kpi b{display:block;font-size:19px;font-variant-numeric:tabular-nums;letter-spacing:-.2px}
+.kpi small{color:var(--t2);font-size:11px}
+.legend{padding:9px 12px}
+.legend .lt{color:var(--t3);font-size:11px;margin-bottom:5px}
+.legend .li{display:flex;gap:7px;align-items:center;font-size:12px;color:var(--t2);margin:2px 0}
+.legend .li i{width:12px;height:12px;border-radius:3px}
+.legend .note{color:var(--t3);font-size:11px;margin-top:5px;max-width:200px}
+
+/* right panel */
+.panel{position:absolute;top:var(--th,78px);right:12px;bottom:22px;width:420px;z-index:6;display:flex;flex-direction:column;transform:translateX(450px);opacity:0;transition:transform .45s cubic-bezier(.2,.8,.2,1),opacity .35s}
+.panel.open{transform:none;opacity:1}
+.ph{padding:14px 16px 10px;border-bottom:1px solid var(--line);position:relative}
+.ph .g{color:var(--acc2);font-size:11px;letter-spacing:.5px;text-transform:uppercase}
+.ph h2{margin:2px 0 4px;font-size:20px;letter-spacing:-.2px;padding-right:80px}
+.ph .meta{color:var(--t3);font-size:12px}
+.ph .nav{position:absolute;top:12px;right:12px;display:flex;gap:6px}
+.pb{overflow:auto;padding:12px 16px 18px;flex:1}
+.tiles{display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px}
+.tile{background:rgba(255,255,255,.035);border:1px solid var(--line);border-radius:11px;padding:9px 10px;opacity:0;transform:translateY(8px);animation:up .5s forwards}
+.tile span{display:block;color:var(--t3);font-size:11px}
+.tile b{display:block;font-size:15.5px;white-space:nowrap;margin-top:1px;font-variant-numeric:tabular-nums}
+.tile small{display:block;font-size:11px;color:var(--t2);margin-top:1px}
+.tile.big{grid-column:span 2}
+.tile.big b{font-size:24px}
+@keyframes up{to{opacity:1;transform:none}}
+.sec{margin-top:16px;opacity:0;animation:up .55s forwards}
+.sec h3{margin:0 0 7px;font-size:12px;color:var(--t2);font-weight:600;letter-spacing:.3px;display:flex;justify-content:space-between;align-items:baseline}
+.sec h3 small{font-weight:400;color:var(--t3)}
+.st{display:inline-flex;align-items:center;gap:5px;font-size:11px;padding:1px 7px;border-radius:20px;border:1px solid}
+.up{color:#86b6ef}.dn{color:#f0a5a5}
+.stack{display:flex;height:16px;border-radius:5px;overflow:hidden;gap:2px;background:transparent}
+.stack i{display:block;height:100%;width:0;transition:width .9s cubic-bezier(.2,.8,.2,1)}
+table.bk{width:100%;border-collapse:collapse;margin-top:8px;font-variant-numeric:tabular-nums}
+table.bk td,table.bk th{padding:4px 4px;text-align:right;font-size:12px;border-bottom:1px solid var(--line)}
+table.bk th{color:var(--t3);font-weight:500;font-size:11px}
+table.bk td:first-child,table.bk th:first-child{text-align:left}
+table.bk td:first-child i{display:inline-block;width:9px;height:9px;border-radius:2px;margin-right:6px}
+table.bk tr.npl td{color:#f3b0a8}
+.chart svg{display:block;width:100%;height:auto;overflow:visible}
+.chart text{fill:var(--t3);font-size:10px}
+.chart .lab{fill:var(--t1);font-size:10.5px;font-weight:600}
+.pr{display:grid;grid-template-columns:1fr auto;gap:2px 8px;padding:5px 0;border-bottom:1px solid var(--line)}
+.pr .n{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.pr .n small{color:var(--t3);margin-left:5px}
+.pr .v{font-variant-numeric:tabular-nums;color:var(--t2);font-size:12px;text-align:right}
+.pr .b{grid-column:1/3;height:4px;background:rgba(255,255,255,.05);border-radius:2px;overflow:hidden}
+.pr .b u{display:block;height:100%;width:0;background:var(--s1);border-radius:2px;transition:width .9s cubic-bezier(.2,.8,.2,1)}
+.cmp{display:grid;grid-template-columns:1fr 1fr 1fr;gap:6px;margin-top:6px}
+.cmp div{background:rgba(255,255,255,.03);border:1px solid var(--line);border-radius:9px;padding:6px 8px}
+.cmp span{display:block;font-size:10.5px;color:var(--t3)}
+.cmp b{font-variant-numeric:tabular-nums}
+.foot{color:var(--t3);font-size:11px;margin-top:16px;line-height:1.5}
+
+/* tooltips */
+.tip{position:absolute;z-index:30;pointer-events:none;padding:8px 10px;font-size:12px;max-width:260px;transform:translate(12px,12px)}
+.tip b{display:block;font-size:13px;margin-bottom:2px}
+.tip .r{display:flex;justify-content:space-between;gap:14px;color:var(--t2)}
+.tip .r em{font-style:normal;color:var(--t1);font-variant-numeric:tabular-nums}
+
+/* loader */
+.loader{position:absolute;inset:0;display:grid;place-items:center;background:var(--bg);z-index:50;transition:opacity .8s}
+.loader.done{opacity:0;pointer-events:none}
+.lc{text-align:center;color:var(--t2)}
+.lc svg{width:54px;height:54px;animation:pulse 1.6s infinite}
+.lc b{display:block;color:var(--t1);font-size:16px;margin:10px 0 4px}
+@keyframes pulse{50%{transform:scale(1.08);filter:drop-shadow(0 0 12px #38bdf8)}}
+
+/* 3D тавцан (diorama.js) */
+#holo{position:absolute;left:0;top:0;width:780px;height:480px;z-index:3;pointer-events:none;opacity:0;transition:opacity .45s}
+#holo.on{opacity:1}
+#holo canvas{width:780px;height:480px;display:block;filter:drop-shadow(0 18px 30px rgba(0,0,0,.55))}
+#holo .hl{position:absolute;inset:0}
+.hlab{position:absolute;left:0;top:0;width:max-content;white-space:nowrap;font-size:11px;padding:3px 7px;border-radius:8px;background:rgba(9,18,34,.82);border:1px solid var(--line2);color:var(--t2);transition:opacity .4s;backdrop-filter:blur(6px)}
+.hlab b{color:var(--t1);margin-left:3px}
+.hlab i{display:inline-block;width:8px;height:8px;border-radius:50%;margin-right:5px;vertical-align:0}
+.hlab.title{z-index:2;font-size:13px;padding:4px 10px;border-color:rgba(56,189,248,.55);color:var(--acc2)}
+.hlab.tower{font-size:10px;padding:2px 6px;display:flex;flex-direction:column;align-items:center;line-height:1.2}
+.hlab.tower b{margin:0}
+.hlab.sat{display:flex;flex-direction:column;align-items:flex-start;line-height:1.25;border-color:rgba(255,255,255,.25)}
+.hlab.stf{display:flex;gap:12px;font-size:11.5px;padding:5px 11px}
+.hlab.stf .sg{white-space:nowrap}
+.hlab.sat span{font-size:10.5px}
+.hlab.drop{color:#ffb4b4;border-color:rgba(255,91,91,.5)}
+.hlab.loop{color:var(--acc2);border-color:rgba(125,211,252,.5)}
+/* ажилчид, хариуцлага, кейс */
+.staff{display:grid;grid-template-columns:repeat(4,1fr);gap:6px}
+.staff div{background:rgba(255,255,255,.035);border:1px solid var(--line);border-radius:10px;padding:7px 8px;text-align:center}
+.staff i{display:block;width:16px;height:16px;border-radius:50%;margin:0 auto 3px;box-shadow:0 0 0 3px rgba(255,255,255,.05)}
+.staff b{display:block;font-size:18px;font-variant-numeric:tabular-nums}
+.staff span{font-size:10.5px;color:var(--t3)}
+.note{font-size:11.5px;color:var(--t2);background:rgba(56,189,248,.07);border:1px solid rgba(56,189,248,.22);border-radius:9px;padding:7px 9px;margin:6px 0 8px;line-height:1.45}
+table.mv{width:100%;border-collapse:collapse;font-variant-numeric:tabular-nums}
+table.mv td,table.mv th{white-space:nowrap;padding:4px 3px;font-size:12px;text-align:right;border-bottom:1px solid var(--line)}
+table.mv th{color:var(--t3);font-weight:500;font-size:11px}
+table.mv td:first-child,table.mv th:first-child{text-align:left;white-space:normal}
+table.mv td small{display:block;color:var(--t3);font-size:10.5px}
+.rg{margin-top:8px}
+.rg .rh{display:flex;justify-content:space-between;align-items:center;padding:6px 0 3px;font-weight:600}
+.rg .rh i{display:inline-block;width:10px;height:10px;border-radius:3px;margin-right:6px}
+.rg .rh small{font-weight:400;color:var(--t2);font-variant-numeric:tabular-nums}
+.rg .tm{display:grid;grid-template-columns:1fr auto auto;gap:8px;padding:3px 0 3px 16px;font-size:12px;color:var(--t2);font-variant-numeric:tabular-nums;border-bottom:1px dashed var(--line)}
+.rg .tm em{font-style:normal;color:var(--t3);font-size:11px}
+.case{display:grid;grid-template-columns:auto 1fr auto;gap:2px 8px;padding:6px 0;border-bottom:1px solid var(--line);align-items:center}
+.case .ty{font-size:10.5px;padding:1px 6px;border-radius:10px;border:1px solid;white-space:nowrap}
+.case .pn{white-space:nowrap;overflow:hidden;text-overflow:ellipsis;font-size:12px}
+.case .pn small{color:var(--t3);margin-left:4px}
+.case .am{text-align:right;font-variant-numeric:tabular-nums;font-size:12px}
+.case .am small{display:block;color:var(--t3);font-size:10.5px}
+.hubrow .nm{color:var(--acc2)}
+
+@media (max-width:900px){
+  #holo{display:none}
+  .list{display:none}.ltog{display:none}
+  .panel{left:8px;right:8px;width:auto;top:auto;height:62vh;bottom:8px;transform:translateY(70vh)}
+  .top{top:8px;left:8px;right:8px}
+  .kpi{min-width:90px;padding:2px 9px}.kpi b{font-size:15px}
+  .legend{display:none}
+  .dock{left:8px;right:8px;bottom:18px}
+  .kpis{max-width:100%;overflow-x:auto;scrollbar-width:none}
+  .kpi{flex:none}
+}
+@media (max-width:600px){
+  .top{gap:6px;padding:6px 8px}
+  .grp>span,.brand em{display:none}
+  .search{flex:1 1 100%;max-width:none;order:5}
+  .seg button{padding:4px 7px;font-size:12px}
+  .brand svg{width:26px;height:26px}
+}
+@media (prefers-reduced-motion:reduce){*{animation-duration:.01s!important;transition-duration:.01s!important}}
+</style>
+</head>
+<body>
+<div id="map" aria-label="Салбаруудын 3D газрын зураг"></div>
+<div class="vignette" aria-hidden="true"></div>
+
+<header class="top glass">
+  <button class="brand" id="home" type="button" title="Нийт багц, анхны харагдац">
+    <svg viewBox="0 0 32 32" aria-hidden="true"><rect width="32" height="32" rx="9" fill="#17263D"/><path d="M9 24V15M16 24V8M23 24V12" stroke="#38BDF8" stroke-width="3.2" fill="none" stroke-linecap="round"/></svg>
+    <span><b>Салбарын багц · 3D</b><em id="asof"></em></span>
+  </button>
+  <span class="demo" title="Энэ хуудасны бүх нэр, тоо зохиомол — бодит байгууллагын өгөгдөл биш">ДЕМО · зохиомол өгөгдөл</span>
+  <div class="search" role="search">
+    <input id="q" type="search" autocomplete="off" spellcheck="false" placeholder="Салбар хайх…  ( / )" aria-label="Салбар хайх">
+    <div id="results" class="results glass" hidden></div>
+  </div>
+  <div class="grp"><span>Сегмент</span><div class="seg" id="segF"></div></div>
+  <div class="grp"><span>Өндөр</span><div class="seg" id="hF"></div></div>
+  <div class="grp"><span>Өнгө</span><div class="seg" id="cF"></div></div>
+  <div class="sp"></div>
+  <button class="ib on" id="orbit" type="button" title="Камерын эргэлт (Space)">⟳</button>
+  <button class="ib" id="satB" type="button" title="Хиймэл дагуул / бараан суурь">◐</button>
+</header>
+
+<aside class="list glass" id="list">
+  <div class="lh"><b>Салбарууд</b><select id="sortS" aria-label="Эрэмбэ"></select></div>
+  <div class="rows" id="rows"></div>
+</aside>
+
+<aside class="panel glass" id="panel" aria-live="polite">
+  <div class="ph">
+    <div class="g" id="pg"></div>
+    <h2 id="pt"></h2>
+    <div class="meta" id="pm"></div>
+    <div class="nav">
+      <button class="ib" id="prevB" type="button" title="Өмнөх (←)">‹</button>
+      <button class="ib" id="nextB" type="button" title="Дараах (→)">›</button>
+      <button class="ib" id="closeB" type="button" title="Хаах (Esc)">✕</button>
+    </div>
+  </div>
+  <div class="pb" id="pb"></div>
+</aside>
+
+<footer class="dock">
+  <div class="kpis glass" id="kpis"></div>
+  <div class="legend glass" id="legend"></div>
+</footer>
+
+<div class="tip glass" id="tip" hidden></div>
+<div class="loader" id="loader"><div class="lc"><svg viewBox="0 0 32 32"><path d="M9 24V15M16 24V8M23 24V12" stroke="#38BDF8" stroke-width="2.6" fill="none" stroke-linecap="round"/></svg><b>Салбарын багц · 3D (демо)</b><span id="lmsg">Ачаалж байна…</span></div></div>
+
+<script src="vendor/maplibre-gl.js"></script>
+<script src="geo.js"></script>
+<script src="data.js"></script>
+<script type="module" src="diorama.js"></script>
+<script>
+(function () {
+'use strict';
+const BP = window.BP, GEO = window.GEO, ML = window.maplibregl;
+if (!ML) { document.getElementById('lmsg').textContent = 'Газрын зургийн сан (MapLibre) ачаалагдсангүй.'; return; }
+const $ = s => document.querySelector(s);
+const RM = matchMedia('(prefers-reduced-motion: reduce)').matches;
+// толгойн мөр мөр шилжвэл (badge нэмэгдсэн) жагсаалт/самбарыг доош нь түлхэнэ
+const setTop = () => { const t = document.querySelector('.top'); document.documentElement.style.setProperty('--th', (t.offsetTop + t.offsetHeight + 8) + 'px'); };
+setTop(); addEventListener('resize', setTop);
+const esc = s => String(s).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+
+// ── формат
+const sp = s => s.replace(/\B(?=(\d{3})+(?!\d))/g, ' ');
+const fN = v => v == null || !isFinite(v) ? '—' : sp(Math.round(v).toString());
+const fB = v => (v / 1e9).toFixed(Math.abs(v) >= 100e9 ? 0 : 1);                       // тэрбум
+const fM = v => {                                                                    // ₮ автомат нэгж
+  const a = Math.abs(v);
+  if (a >= 1e9) return (v / 1e9).toFixed(a >= 100e9 ? 0 : 1) + ' тэрбум ₮';
+  if (a >= 1e6) return (v / 1e6).toFixed(a >= 100e6 ? 0 : 1) + ' сая ₮';
+  return fN(v) + ' ₮';
+};
+const fP = (v, d = 1) => v == null || !isFinite(v) ? '—' : (100 * v).toFixed(d) + '%';
+const fPP = v => (v >= 0 ? '+' : '−') + Math.abs(100 * v).toFixed(1) + ' п.п';
+const sgn = (v, f) => (v > 0 ? '+' : v < 0 ? '−' : '±') + f(Math.abs(v));
+const MN = ['1-р','2-р','3-р','4-р','5-р','6-р','7-р','8-р','9-р','10-р','11-р','12-р'];
+const mLab = s => { const [y, m] = s.split('-'); return y.slice(2) + '.' + m; };
+const mLong = s => { const [y, m, d] = s.split('-'); return y + ' оны ' + MN[+m - 1] + ' сар' + (d && d !== '01' && +d < 28 ? ' ' + (+d) : ''); };
+const short = n => n.replace(/\s*САЛБАР$/i, '').toLowerCase().replace(/(^|[\s\-\/(])([a-zа-яөүё])/g, (m, a, b) => a + b.toUpperCase());
+
+// ── өгөгдөл → entity
+const BK = ['Хэвийн', '1–30', '31–60', '61–90', '91–180', '180+'];
+const BKC = ['#0ca30c', '#fab219', '#ec835a', '#e0603f', '#d03b3b', '#8f1d2c'];
+const sum = a => a.reduce((s, x) => s + x, 0);
+function derive(e) {
+  const n = e.now, p = e.prev;
+  e.bal = sum(n.bkB); e.cnt = sum(n.bkN);
+  e.npl = n.bkB[4] + n.bkB[5]; e.nplN = n.bkN[4] + n.bkN[5];
+  e.par30 = n.bkB[2] + n.bkB[3] + e.npl;
+  e.od = e.bal - n.bkB[0];
+  e.nplP = e.bal ? e.npl / e.bal : 0; e.parP = e.bal ? e.par30 / e.bal : 0;
+  e.pBal = sum(p.bkB); e.pNpl = p.bkB[4] + p.bkB[5];
+  e.dBal = e.bal - e.pBal; e.gr = e.pBal ? e.dBal / e.pBal : null;
+  e.dNplP = e.nplP - (e.pBal ? e.pNpl / e.pBal : 0);
+  e.avg = e.cnt ? e.bal / e.cnt : 0;
+  e.ovrd = n.bkB[1] + n.bkB[2] + n.bkB[3]; e.ovrdN = n.bkN[1] + n.bkN[2] + n.bkN[3]; e.ovrdP = e.bal ? e.ovrd / e.bal : 0;
+  e.odN = e.cnt - n.bkN[0];
+  // шинээр хэтэрсэн гэх мэт: mv[i] = [шинэ хэтэрсэн n,₮, 30+ n,₮, NPL-д n,₮, хэвийн болсон n,₮]
+  const mvs = (k, days) => { const a = e.mv.slice(-days); return [sum(a.map(m => m[k])), sum(a.map(m => m[k + 1]))]; };
+  e.mvS = d => [mvs(0, d), mvs(2, d), mvs(4, d), mvs(6, d)];
+  e.disb12 = sum(e.disb.slice(0, -1).map(x => x[1])); e.disbN12 = sum(e.disb.slice(0, -1).map(x => x[0]));
+  e.short = e.short || short(e.name);
+  return e;
+}
+function seg(b) {
+  const g = (b.grp || '').toUpperCase();
+  if (g.includes('ДИЖИТАЛ')) return 'dig';
+  if (g.includes('ОРОН')) return 'on';
+  if (g.includes('УЛААНБААТАР')) return 'ub';
+  return 'oth';
+}
+const SEGN = { all: 'Бүгд', ub: 'Хот', on: 'Орон нутаг', dig: 'Дижитал' };
+const ALL = BP.branches.map(b => { b.seg = seg(b); return derive(b); }).filter(b => b.bal > 0);
+const MAPPED = ALL.filter(b => b.lat && b.lon && b.bal >= 50e6);
+const UNMAPPED = ALL.filter(b => !MAPPED.includes(b));
+
+function aggregate(list, name, grp, extra) {
+  const z6 = () => [0, 0, 0, 0, 0, 0];
+  const e = { name, grp, short: name, agg: list.length, now: { bkB: z6(), bkN: z6(), sa: 0, saN: 0, cust: 0 }, prev: { bkB: z6(), bkN: z6() },
+    tr: BP.trend.map(() => [0, 0, 0, 0]), disb: BP.months.map(() => [0, 0]), prod: [],
+    staff: { dir: 0, sr: 0, lo: 0, svc: 0, oth: 0 }, saStaff: 0, mv: BP.days.map(() => [0, 0, 0, 0, 0, 0, 0, 0]), resp: {}, cases: [], ...extra };
+  const pm = {};
+  for (const b of list) {
+    for (let i = 0; i < 6; i++) { e.now.bkB[i] += b.now.bkB[i]; e.now.bkN[i] += b.now.bkN[i]; e.prev.bkB[i] += b.prev.bkB[i]; e.prev.bkN[i] += b.prev.bkN[i]; }
+    e.now.sa += b.now.sa; e.now.saN += b.now.saN; e.now.cust += b.now.cust || 0;
+    b.tr.forEach((t, i) => { for (let k = 0; k < 4; k++) e.tr[i][k] += t[k]; });
+    b.disb.forEach((t, i) => { e.disb[i][0] += t[0]; e.disb[i][1] += t[1]; });
+    for (const p of b.prod) { const q = pm[p[0]] || (pm[p[0]] = [p[0], p[1], p[2], 0, 0, 0]); q[3] += p[3]; q[4] += p[4]; q[5] += p[5]; }
+    for (const k in b.staff) e.staff[k] = (e.staff[k] || 0) + b.staff[k];
+    e.saStaff += b.saStaff || 0;
+    b.mv.forEach((m, i) => { for (let k = 0; k < 8; k++) e.mv[i][k] += m[k]; });
+    for (const g in b.resp) for (const t in b.resp[g]) {
+      const s = b.resp[g][t], d = ((e.resp[g] = e.resp[g] || {})[t] = e.resp[g][t] || [0, 0, [0, 0, 0, 0, 0, 0]]);
+      d[0] += s[0]; d[1] += s[1]; s[2].forEach((v, i) => d[2][i] += v);
+    }
+    e.cases.push(...b.cases.map(c => [...c, b.short]));
+  }
+  e.prod = Object.values(pm).sort((a, b) => b[4] - a[4]);
+  e.cases.sort((a, b) => b[2] - a[2] || b[4] - a[4]); e.cases = e.cases.slice(0, 12);
+  return derive(e);
+}
+
+// ── УБ кластер: төвөөс 20 км дотор (улсын түвшинд нэг багана болж нийлнэ)
+const UBC = [106.917, 47.918];
+const km = (a, b) => { const dx = (a[0] - b[0]) * 111.32 * Math.cos(47.9 * Math.PI / 180), dy = (a[1] - b[1]) * 110.57; return Math.hypot(dx, dy); };
+MAPPED.forEach(b => { b.ll = [b.lon, b.lat]; b.ub = km(b.ll, UBC) < 20; });
+// давхцсан координатыг (нэг байранд 2-3 салбар) жижиг тойрогт түлхэж салгана — зөвхөн дэлгэрэнгүй (хотын) түвшинд
+(function spread() {
+  const ub = MAPPED.filter(b => b.ub); ub.forEach(b => b.pos = [b.lon, b.lat]);
+  const R = 0.62; // км
+  for (let it = 0; it < 60; it++) for (let i = 0; i < ub.length; i++) for (let j = i + 1; j < ub.length; j++) {
+    const a = ub[i], c = ub[j], d = km(a.pos, c.pos);
+    if (d < R) {
+      let ang = d < 1e-4 ? (i * 2.399 + j) : Math.atan2(c.pos[1] - a.pos[1], (c.pos[0] - a.pos[0]) * Math.cos(47.9 * Math.PI / 180));
+      const push = (R - d) / 2, dx = Math.cos(ang) * push / (111.32 * Math.cos(47.9 * Math.PI / 180)), dy = Math.sin(ang) * push / 110.57;
+      a.pos = [a.pos[0] - dx, a.pos[1] - dy]; c.pos = [c.pos[0] + dx, c.pos[1] + dy];
+    }
+  }
+  MAPPED.forEach(b => { if (!b.ub) b.pos = b.ll; });
+})();
+
+// ── төлөв
+const S = { segF: 'all', h: 'bal', c: 'npl', sel: null, orbit: !RM, sat: true, sort: 'bal' };
+const TOTAL = () => aggregate(visible(ALL), S.segF === 'all' ? 'Нийт багц' : SEGN[S.segF] + ' сегмент', 'Компанийн нийт', { total: true });
+const visible = list => list.filter(b => S.segF === 'all' || b.seg === S.segF);
+const COMP = aggregate(ALL, 'Нийт', '');
+const SEGAVG = {}; for (const k of ['ub', 'on', 'dig']) SEGAVG[k] = aggregate(ALL.filter(b => b.seg === k), SEGN[k], '');
+
+// ── өнгөний шатлал (статус = утгатай босго, өнгө дангаараа биш — домогт тайлбар бичигдэнэ)
+const COLOR = {
+  npl: { l: 'NPL %', f: e => e.nplP, steps: [[.05, '#0ca30c', '< 5%'], [.10, '#fab219', '5–10%'], [.20, '#ec835a', '10–20%'], [Infinity, '#d03b3b', '≥ 20%']], note: 'NPL = 90-ээс дээш хоног хэтэрсэн үндсэн үлдэгдэл ÷ нийт үлдэгдэл' },
+  par: { l: 'PAR30 %', f: e => e.parP, steps: [[.10, '#0ca30c', '< 10%'], [.20, '#fab219', '10–20%'], [.30, '#ec835a', '20–30%'], [Infinity, '#d03b3b', '≥ 30%']], note: 'PAR30 = 30-аас дээш хоног хэтэрсэн үлдэгдэл ÷ нийт үлдэгдэл' },
+  gr: { l: '30 хоногийн өсөлт', f: e => e.gr, steps: [[-.05, '#e66767', '< −5%'], [-.01, '#f0a5a5', '−5…−1%'], [.01, '#9a9a94', '±1%'], [.05, '#86b6ef', '+1…+5%'], [Infinity, '#3987e5', '> +5%']], note: 'Үлдэгдлийн өөрчлөлт: ' }
+};
+const colorOf = e => { const c = COLOR[S.c], v = c.f(e); if (v == null) return '#9a9a94'; for (const s of c.steps) if (v < s[0]) return s[1]; return c.steps[c.steps.length - 1][1]; };
+const HM = { bal: { l: 'Үлдэгдэл', f: e => e.bal, fmt: fM }, npl: { l: 'NPL дүн', f: e => e.npl, fmt: fM }, cnt: { l: 'Данс', f: e => e.cnt, fmt: v => fN(v) + ' данс' }, disb: { l: '12 сарын олголт', f: e => e.disb12, fmt: fM } };
+
+const lighten = (h, t) => '#' + [1, 3, 5].map(i => Math.round(parseInt(h.substr(i, 2), 16) + (255 - parseInt(h.substr(i, 2), 16)) * t).toString(16).padStart(2, '0')).join('');
+// ── геометр: цилиндр (24 талт)
+function circle(ll, rKm, n = 28) {
+  const c = [], kx = 111.32 * Math.cos(ll[1] * Math.PI / 180), ky = 110.57;
+  for (let i = 0; i <= n; i++) { const a = i / n * 2 * Math.PI; c.push([ll[0] + Math.cos(a) * rKm / kx, ll[1] + Math.sin(a) * rKm / ky]); }
+  return { type: 'Polygon', coordinates: [c] };
+}
+let UBAGG;
+function features(k) {                         // k = өсөлтийн коэффициент (анимейшн)
+  const vis = visible(MAPPED), hf = HM[S.h].f;
+  const rural = vis.filter(b => !b.ub), ub = vis.filter(b => b.ub);
+  UBAGG = ub.length ? aggregate(ub, 'Улаанбаатар', ub.length + ' салбар нэгтгэсэн', { ubAgg: true, pos: UBC }) : null;
+  const top = [...rural, ...(UBAGG ? [UBAGG] : [])];
+  const mx = Math.max(1, ...top.map(hf)), mxU = Math.max(1, ...ub.map(hf));
+  const F = (e, rKm, h, id) => ({ type: 'Feature', id, properties: { id, h: h * k, c: colorOf(e), cs: lighten(colorOf(e), .5), nm: e.short, ub: e.ubAgg ? 1 : 0 }, geometry: circle(e.pos, rKm) });
+  const P = (e, id) => ({ type: 'Feature', id, properties: { id, rk: -hf(e), c: colorOf(e), nm: e.short + (e.ubAgg ? ' (' + e.agg + ')' : ''), v: HM[S.h].fmt(hf(e)) }, geometry: { type: 'Point', coordinates: e.pos } });
+  const big = top.map(e => F(e, e.ubAgg ? 15 : 11, 5000 + 400000 * Math.sqrt(hf(e) / mx), e.ubAgg ? 1 : e.no));
+  const det = ub.map(b => F(b, .2, 40 + 1500 * Math.sqrt(hf(b) / mxU), b.no));
+  return {
+    big: { type: 'FeatureCollection', features: big },
+    det: { type: 'FeatureCollection', features: det },
+    bigP: { type: 'FeatureCollection', features: top.map(e => P(e, e.ubAgg ? 1 : e.no)) },
+    detP: { type: 'FeatureCollection', features: ub.map(b => P(b, b.no)) }
+  };
+}
+const byId = id => id === 1 ? UBAGG : ALL.find(b => b.no === id);
+
+// ── газрын зураг
+// Хиймэл дагуул + рельеф (нээлттэй tile). Tile ачаалагдахгүй бол доорх geojson бараан суурь харагдсаар үлдэнэ.
+const ESRI = 'https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}';
+const DEM = 'https://s3.amazonaws.com/elevation-tiles-prod/terrarium/{z}/{x}/{y}.png';
+const REGC = ['match', ['get', 'reg'], 'Хангайн бүс', '#15304a', 'Баруун бүс', '#172c46', 'Төвийн бүс', '#183450', 'Зүүн бүс', '#152e47', 'Говийн бүс', '#1a2c40', 'Хойд бүс', '#14314c', 'Улаанбаатар', '#1d3d5e', '#14293f'];
+const map = new ML.Map({
+  container: 'map', attributionControl: { compact: true, customAttribution: 'Демо · зохиомол өгөгдөл' },
+  center: [103.5, 46.6], zoom: 2.4, pitch: 0, bearing: 0, maxPitch: 78, antialias: true,
+  style: {
+    version: 8,
+    sources: {
+      sat: { type: 'raster', tiles: [ESRI], tileSize: 256, maxzoom: 19, attribution: 'Хиймэл дагуул © Esri, Maxar' },
+      dem: { type: 'raster-dem', tiles: [DEM], tileSize: 256, encoding: 'terrarium', maxzoom: 12, attribution: 'Рельеф: AWS Terrain Tiles' },
+      demH: { type: 'raster-dem', tiles: [DEM], tileSize: 256, encoding: 'terrarium', maxzoom: 11 },
+      aim: { type: 'geojson', data: GEO.aimags }, ubd: { type: 'geojson', data: GEO.ub_districts }, mask: { type: 'geojson', data: GEO.mask }
+    },
+    layers: [
+      { id: 'bg', type: 'background', paint: { 'background-color': '#08111f' } },
+      { id: 'aimFill', type: 'fill', source: 'aim', paint: { 'fill-color': REGC, 'fill-opacity': 1 } },
+      { id: 'ubdFill', type: 'fill', source: 'ubd', minzoom: 7, paint: { 'fill-color': '#1b3a5a', 'fill-opacity': .55 } },
+      { id: 'hill', type: 'hillshade', source: 'demH', layout: { visibility: 'none' }, paint: { 'hillshade-shadow-color': '#050b16', 'hillshade-highlight-color': '#5d86b8', 'hillshade-accent-color': '#0d1d33', 'hillshade-exaggeration': .55 } },
+      { id: 'sat', type: 'raster', source: 'sat', paint: { 'raster-opacity': 1, 'raster-saturation': -.25, 'raster-brightness-max': .82, 'raster-contrast': .08 } },
+      { id: 'mask', type: 'fill', source: 'mask', paint: { 'fill-color': '#050a14', 'fill-opacity': .62 } },
+      { id: 'aimLineGlow', type: 'line', source: 'aim', paint: { 'line-color': '#38bdf8', 'line-width': 5, 'line-blur': 5, 'line-opacity': .22 } },
+      { id: 'aimLine', type: 'line', source: 'aim', paint: { 'line-color': '#9bd8ff', 'line-width': ['interpolate', ['linear'], ['zoom'], 4, .6, 9, 1.4], 'line-opacity': .7 } },
+      { id: 'ubdLine', type: 'line', source: 'ubd', minzoom: 8, paint: { 'line-color': '#9bd8ff', 'line-width': 1, 'line-opacity': .45, 'line-dasharray': [3, 2] } }
+    ]
+  }
+});
+map.addControl(new ML.NavigationControl({ visualizePitch: true }), 'bottom-right');
+// tile алдаа (сүлжээ/CSP) — чимээгүй алгасна; geojson суурь хэвээр
+// Fallback: tile 3+ удаа алдаа өгвөл тухайн давхаргыг унтрааж geojson бараан суурь руу шилжинэ (terrain-ийг ч унтраана).
+const TERR = { sat: 0, dem: 0, demH: 0 };
+map.on('error', e => {
+  const id = (e && e.sourceId) || '';
+  if (!(id in TERR)) return;
+  S.netWarned = 1;
+  if (++TERR[id] !== 3) return;
+  try {
+    if (id === 'sat') { S.noSat = true; map.setLayoutProperty('sat', 'visibility', 'none'); }
+    else { S.noDem = true; map.setTerrain(null); terrOn = false; map.setLayoutProperty('hill', 'visibility', 'none'); }
+  } catch (x) { }
+  // terrain унтраах нь эхлэлийн flyTo-г зогсоож болно — камер эхлэлийн байрлалдаа үлдсэн бол дахин нисгэнэ
+  setTimeout(() => { if (started && S.sel == null && !map.isMoving() && map.getZoom() < 3) intro(); }, 300);
+});
+
+const SPLIT = 8.4;    // улсын → хотын түвшин шилжих zoom
+function addLayers() {
+  const f = features(0);
+  map.addSource('big', { type: 'geojson', data: f.big }); map.addSource('det', { type: 'geojson', data: f.det });
+  map.addSource('bigP', { type: 'geojson', data: f.bigP }); map.addSource('detP', { type: 'geojson', data: f.detP });
+  map.addSource('sel', { type: 'geojson', data: { type: 'FeatureCollection', features: [] } });
+  const glow = (id, src, rng) => map.addLayer({ id, type: 'circle', source: src, ...rng, paint: {
+    'circle-color': ['get', 'c'], 'circle-blur': 1, 'circle-opacity': .55, 'circle-pitch-alignment': 'map',
+    'circle-radius': ['interpolate', ['exponential', 2], ['zoom'], 3, 6, 8, 60, 12, 30, 16, 300] } });
+  glow('bigGlow', 'bigP', { maxzoom: SPLIT }); glow('detGlow', 'detP', { minzoom: SPLIT });
+  map.addLayer({ id: 'selRing', type: 'circle', source: 'sel', paint: { 'circle-color': 'rgba(0,0,0,0)', 'circle-stroke-color': '#7dd3fc', 'circle-stroke-width': 2, 'circle-radius': 10, 'circle-pitch-alignment': 'map', 'circle-stroke-opacity': .9 } });
+  const ext = (id, src, rng) => map.addLayer({ id, type: 'fill-extrusion', source: src, ...rng, paint: {
+    'fill-extrusion-color': ['case', ['boolean', ['feature-state', 'sel'], false], ['get', 'cs'], ['boolean', ['feature-state', 'hov'], false], '#bfe8ff', ['get', 'c']],
+    'fill-extrusion-height': ['get', 'h'], 'fill-extrusion-base': 0, 'fill-extrusion-opacity': .93, 'fill-extrusion-vertical-gradient': true } });
+  ext('bigExt', 'big', { maxzoom: SPLIT }); ext('detExt', 'det', { minzoom: SPLIT });
+  setLabels(f.bigP, f.detP);
+}
+// ── шошго: symbol layer-ийн оронд HTML (glyph/font сервер шаардахгүй). rk-ээр эрэмбэлж давхцлыг нуух.
+const LBL = document.createElement('div'); LBL.className = 'lbls'; map.getContainer().appendChild(LBL);
+let LB = { big: [], det: [] };
+function setLabels(bigP, detP) {
+  const mk = (fc, cls) => fc.features.map(f => {
+    const el = document.createElement('div'); el.className = 'mlb ' + cls;
+    el.innerHTML = esc(f.properties.nm) + '<small>' + esc(f.properties.v) + '</small>';
+    return { el, ll: f.geometry.coordinates, rk: f.properties.rk, w: 0, h: 0 };
+  }).sort((a, b) => a.rk - b.rk);
+  LBL.textContent = '';
+  LB = { big: mk(bigP, 'big'), det: mk(detP, 'det') };
+  for (const k of ['big', 'det']) for (const l of LB[k]) { l.el.style.display = 'none'; LBL.appendChild(l.el); }
+}
+function placeLabels() {
+  const z = map.getZoom(), act = z < SPLIT ? 'big' : 'det', W = map.getCanvas().clientWidth, H = map.getCanvas().clientHeight, boxes = [];
+  for (const k of ['big', 'det']) for (const l of LB[k]) {
+    if (k !== act) { if (l.el.style.display !== 'none') l.el.style.display = 'none'; continue; }
+    if (l.el.style.display === 'none') l.el.style.display = '';
+    if (!l.w) { l.w = l.el.offsetWidth; l.h = l.el.offsetHeight; }
+    const p = map.project(l.ll), x = p.x - l.w / 2, y = p.y + 10;
+    const b = [x - 3, y - 2, x + l.w + 3, y + l.h + 2];
+    const hit = x + l.w < 0 || x > W || y > H || y + l.h < 0 || boxes.some(c => b[0] < c[2] && b[2] > c[0] && b[1] < c[3] && b[3] > c[1]);
+    l.el.style.visibility = hit ? 'hidden' : 'visible';
+    if (!hit) { boxes.push(b); l.el.style.transform = `translate(${x.toFixed(1)}px,${y.toFixed(1)}px)`; }
+  }
+}
+map.on('render', placeLabels);
+function setSat(on) {
+  S.sat = on; $('#satB').classList.toggle('on', !on);
+  map.setLayoutProperty('sat', 'visibility', on && !S.noSat ? 'visible' : 'none');
+  map.setLayoutProperty('hill', 'visibility', on || S.noDem ? 'none' : 'visible');
+  terrainFor(map.getZoom());
+}
+// Рельеф зөвхөн улс/бүсийн түвшинд: хотын (zoom≥9) түвшинд terrain нь камерын төвийг баганаас зөрүүлдэг тул унтраана
+let terrOn = null;
+function terrainFor(z) {
+  const want = z < 9 && !S.noDem;
+  if (want === terrOn) return;
+  terrOn = want;
+  try { map.setTerrain(want ? { source: 'dem', exaggeration: 1.5 } : null); } catch (e) { }
+}
+map.on('zoomend', () => { const z = map.getZoom(); if (z >= 9.5 || z < 8.5) terrainFor(z); });
+
+// ── өндрийн анимейшн (өсөх / метрик солих): feature бүрийн h-г lerp хийж setData
+let curH = {}, animId = 0;
+function refresh(animate = true) {
+  const tgt = features(1), my = ++animId, from = { ...curH }, T0 = performance.now(), dur = animate && !RM ? 1100 : 0;
+  const key = (s, f) => s + ':' + f.properties.id;
+  setLabels(tgt.bigP, tgt.detP); map.triggerRepaint();
+  const step = now => {
+    if (my !== animId) return;
+    const t = dur ? Math.min(1, (now - T0) / dur) : 1, e = 1 - Math.pow(1 - t, 3);
+    for (const s of ['big', 'det']) {
+      const fc = { type: 'FeatureCollection', features: tgt[s].features.map(f => {
+        const k = key(s, f), h0 = from[k] ?? 0, h = h0 + (f.properties.h - h0) * e;
+        if (t === 1) curH[k] = f.properties.h;
+        return { ...f, properties: { ...f.properties, h } };
+      }) };
+      map.getSource(s).setData(fc);
+    }
+    map.getSource('bigP').setData(tgt.bigP); map.getSource('detP').setData(tgt.detP);
+    if (t < 1) requestAnimationFrame(step); else restoreSel();
+  };
+  requestAnimationFrame(step);
+  renderList(); renderKpis(); renderLegend();
+}
+function restoreSel() {
+  if (S.sel == null) return;
+  for (const s of ['big', 'det']) try { map.setFeatureState({ source: s, id: S.sel }, { sel: true }); } catch (e) { }
+}
+
+// ── камерын эргэлт ба сонголтын цагираг
+let lastInt = performance.now();
+['mousedown', 'wheel', 'touchstart', 'keydown'].forEach(ev => addEventListener(ev, () => lastInt = performance.now(), { passive: true }));
+function loop(now) {
+  if (S.orbit && !map.isMoving() && now - lastInt > 2500 && S.ready) map.setBearing(map.getBearing() + 0.035);
+  if (S.sel != null && map.getLayer('selRing')) {
+    const p = (now % 1800) / 1800, z = map.getZoom(), pxkm = 512 * Math.pow(2, z) / (40075 * Math.cos(47.5 * Math.PI / 180)), base = pxkm * (z < SPLIT ? (S.sel === 1 ? 15 : 11) : .2) * 1.3;
+    map.setPaintProperty('selRing', 'circle-radius', base * (1 + p * 1.6));
+    map.setPaintProperty('selRing', 'circle-stroke-opacity', .9 * (1 - p));
+  }
+  requestAnimationFrame(loop);
+}
+
+// ── hover / click
+const tip = $('#tip');
+function showTip(e, x, y) {
+  tip.innerHTML = `<b>${esc(e.short)}${e.ubAgg ? ' · ' + e.agg + ' салбар' : ''}</b>
+    <div class="r">Үлдэгдэл <em>${fM(e.bal)}</em></div><div class="r">Данс <em>${fN(e.cnt)}</em></div>
+    <div class="r">NPL % <em>${fP(e.nplP)}</em></div><div class="r">PAR30 % <em>${fP(e.parP)}</em></div>
+    <div class="r">30 хоногт <em>${e.gr == null ? '—' : sgn(e.gr, v => (100 * v).toFixed(1) + '%')}</em></div>`;
+  tip.hidden = false;
+  const w = tip.offsetWidth, h = tip.offsetHeight;
+  tip.style.left = Math.min(x, innerWidth - w - 30) + 'px'; tip.style.top = Math.min(y, innerHeight - h - 30) + 'px';
+}
+let hov = null;
+function setHov(src, id) {
+  if (hov && (hov.src !== src || hov.id !== id)) try { map.setFeatureState({ source: hov.src, id: hov.id }, { hov: false }); } catch (e) { }
+  hov = id == null ? null : { src, id };
+  if (hov) map.setFeatureState(hov, { hov: true });
+}
+for (const [lyr, src] of [['bigExt', 'big'], ['detExt', 'det']]) {
+  map.on('mousemove', lyr, ev => { const f = ev.features[0], e = byId(f.properties.id); if (!e) return; map.getCanvas().style.cursor = 'pointer'; setHov(src, f.id); showTip(e, ev.point.x, ev.point.y); });
+  map.on('mouseleave', lyr, () => { map.getCanvas().style.cursor = ''; setHov(null, null); tip.hidden = true; });
+  map.on('click', lyr, ev => { const id = ev.features[0].properties.id; select(byId(id), true); });
+}
+
+function select(e, fly) {
+  for (const s of ['big', 'det']) if (S.sel != null) try { map.setFeatureState({ source: s, id: S.sel }, { sel: false }); } catch (x) { }
+  if (!e) { dimMap(false); S.sel = null; S.selE = null; S.hub = null; $('#panel').classList.remove('open'); map.getSource('sel').setData({ type: 'FeatureCollection', features: [] }); renderList(); window.Holo && Holo.hide(); return; }
+  S.selE = e; showHolo(e);
+  S.hub = e.hub || null; S.sel = e.ubAgg ? 1 : (e.total || e.hub) ? null : e.no;
+  restoreSel();
+  map.getSource('sel').setData(e.pos ? { type: 'FeatureCollection', features: [{ type: 'Feature', properties: {}, geometry: { type: 'Point', coordinates: e.pos } }] } : { type: 'FeatureCollection', features: [] });
+  renderPanel(e); renderList();
+  if (fly && e.pos) {
+    lastInt = performance.now();
+    const z = e.ubAgg ? 10.4 : e.ub ? 12.6 : 7.3;
+    terrainFor(z);
+    map.flyTo({ center: e.pos, zoom: z, pitch: e.ub || e.ubAgg ? 55 : 48, bearing: map.getBearing() + 35, duration: RM ? 0 : 2600, curve: 1.6, essential: true,
+      padding: { top: innerWidth > 900 ? Math.min(420, innerHeight * .5) : 0, right: innerWidth > 900 ? 430 : 0, bottom: innerWidth > 900 ? 0 : innerHeight * .55, left: innerWidth > 900 && !$('#list').classList.contains('hide') ? 300 : 0 } });
+  }
+}
+function home() {
+  select(null); lastInt = performance.now(); terrainFor(4);
+  map.flyTo({ center: [103.2, 46.4], zoom: innerWidth < 700 ? 3.6 : 4.75, pitch: 52, bearing: -12, duration: RM ? 0 : 2600, padding: { left: 0, right: 0, top: 0, bottom: 0 }, essential: true });
+}
+
+// ── жижиг SVG графикууд (нэг тэнхлэг, hover tooltip)
+const ctip = tip;
+function hoverable(svg, items) {
+  svg.querySelectorAll('[data-i]').forEach(el => {
+    el.addEventListener('mousemove', ev => { const it = items[+el.dataset.i]; ctip.innerHTML = it; ctip.hidden = false; const w = ctip.offsetWidth; ctip.style.left = Math.min(ev.clientX, innerWidth - w - 30) + 'px'; ctip.style.top = (ev.clientY - 10) + 'px'; });
+    el.addEventListener('mouseleave', () => ctip.hidden = true);
+  });
+}
+function nice(mx) { if (mx <= 0) return 1; const m = Math.pow(10, Math.floor(Math.log10(mx))), r = mx / m; return (r <= 1 ? 1 : r <= 2 ? 2 : r <= 2.5 ? 2.5 : r <= 5 ? 5 : 10) * m; }
+const topR = (x, y, w, h, r) => { r = Math.min(r, w / 2, h); return `M${x},${y + h}V${y + r}Q${x},${y} ${x + r},${y}H${x + w - r}Q${x + w},${y} ${x + w},${y + r}V${y + h}Z`; };
+function barChart(el, labels, vals, { fmt, axis, color = '#3987e5', tipF, all }) {
+  const W = 388, H = 132, L = 34, B = 18, T = 14, n = vals.length, mx = nice(Math.max(...vals) * 1.05), bw = (W - L) / n;
+  let s = `<svg viewBox="0 0 ${W} ${H}" role="img">`;
+  for (let i = 0; i <= 2; i++) { const v = mx * i / 2, y = H - B - (H - B - T) * i / 2; s += `<line x1="${L}" x2="${W}" y1="${y}" y2="${y}" stroke="var(--grid)"/><text x="${L - 5}" y="${y + 3}" text-anchor="end">${axis(v)}</text>`; }
+  vals.forEach((v, i) => {
+    const h = mx ? (H - B - T) * v / mx : 0, x = L + i * bw + 1, w = bw - 2, y = H - B - h, last = i === n - 1;
+    s += `<path d="${topR(x, y, w, Math.max(h, 0.001), 3)}" fill="${color}" opacity="${last ? 1 : .78}" style="transform-origin:${x}px ${H - B}px;transform:scaleY(0);animation:gy .7s ${(i * 0.035).toFixed(2)}s cubic-bezier(.2,.8,.2,1) forwards"/>`;
+    s += `<rect data-i="${i}" x="${L + i * bw}" y="${T - 6}" width="${bw}" height="${H - B - T + 6}" fill="transparent"/>`;
+    if (labels[i] && (all || i % 2 === (n - 1) % 2)) s += `<text x="${x + w / 2}" y="${H - 5}" text-anchor="middle">${labels[i]}</text>`;
+  });
+  const lv = vals[n - 1], ly = H - B - (mx ? (H - B - T) * lv / mx : 0);
+  s += `<text class="lab" x="${L + (n - 1) * bw + bw / 2}" y="${ly - 4}" text-anchor="middle">${fmt(lv)}</text></svg>`;
+  el.innerHTML = s; hoverable(el.firstChild, vals.map((v, i) => tipF(i)));
+}
+function lineChart(el, labels, vals, { tipF, ref }) {
+  const W = 388, H = 112, L = 34, B = 18, T = 14, n = vals.length, mx = nice(Math.max(...vals, ref || 0) * 1.1) || .01, dx = (W - L - 12) / (n - 1);
+  const X = i => L + 6 + i * dx, Y = v => H - B - (H - B - T) * v / mx;
+  let s = `<svg viewBox="0 0 ${W} ${H}" role="img">`;
+  for (let i = 0; i <= 2; i++) { const v = mx * i / 2, y = Y(v); s += `<line x1="${L}" x2="${W}" y1="${y}" y2="${y}" stroke="var(--grid)"/><text x="${L - 5}" y="${y + 3}" text-anchor="end">${(100 * v).toFixed(v * 100 < 10 && v ? 1 : 0)}%</text>`; }
+  if (ref != null) s += `<line x1="${L}" x2="${W}" y1="${Y(ref)}" y2="${Y(ref)}" stroke="#b9c6d8" stroke-dasharray="3 3" opacity=".55"/><text x="${W}" y="${Y(ref) - 4}" text-anchor="end">компанийн ${(100 * ref).toFixed(1)}%</text>`;
+  const pts = vals.map((v, i) => `${X(i)},${Y(v)}`).join(' ');
+  const len = 1400;
+  s += `<polyline points="${pts}" fill="none" stroke="#ec835a" stroke-width="2" stroke-linejoin="round" stroke-dasharray="${len}" stroke-dashoffset="${len}" style="animation:dash 1.4s .15s ease forwards"/>`;
+  vals.forEach((v, i) => { s += `<circle cx="${X(i)}" cy="${Y(v)}" r="${i === n - 1 ? 4.5 : 2.6}" fill="#ec835a" stroke="var(--bg)" stroke-width="1.5"/><rect data-i="${i}" x="${X(i) - dx / 2}" y="${T - 6}" width="${dx}" height="${H - B - T + 6}" fill="transparent"/>`; if (i % 2 === (n - 1) % 2) s += `<text x="${X(i)}" y="${H - 5}" text-anchor="middle">${labels[i]}</text>`; });
+  s += `<text class="lab" x="${X(n - 1)}" y="${Y(vals[n - 1]) - 9}" text-anchor="end">${fP(vals[n - 1])}</text></svg>`;
+  el.innerHTML = s; hoverable(el.firstChild, vals.map((v, i) => tipF(i)));
+}
+document.head.insertAdjacentHTML('beforeend', '<style>@keyframes gy{to{transform:scaleY(1)}}@keyframes dash{to{stroke-dashoffset:0}}</style>');
+
+// ── тоо гүйлгэх
+function countUp(root) {
+  root.querySelectorAll('[data-cu]').forEach(el => {
+    const v = +el.dataset.cu, f = FMT[el.dataset.f], T0 = performance.now(), d = RM ? 0 : 900;
+    const st = now => { const t = d ? Math.min(1, (now - T0) / d) : 1, e = 1 - Math.pow(1 - t, 3); el.textContent = f(v * e); if (t < 1) requestAnimationFrame(st); };
+    requestAnimationFrame(st);
+  });
+}
+const FMT = { m: fM, n: fN, p: v => fP(v), b: v => fB(v) };
+const cu = (v, f) => `<b data-cu="${v}" data-f="${f}">${FMT[f](0)}</b>`;
+const stc = (v, steps) => { for (const s of steps) if (v < s[0]) return s; return steps[steps.length - 1]; };
+const badge = (v, kind) => { const s = stc(v, COLOR[kind].steps); return `<span class="st" style="color:${s[1]};border-color:${s[1]}66">● ${fP(v)} · ${s[2]}</span>`; };
+
+// ── хариуцлагын бүлгүүд
+const RG = {
+  own: { l: 'Салбар өөрөө', c: '#3987e5', hex: 0x3987e5 },
+  colU: { l: 'Төлүүлэлт · Уламжлалт', c: '#d95926', hex: 0xd95926 },
+  colD: { l: 'Төлүүлэлт · Дижитал', c: '#199e70', hex: 0x199e70 },
+  spec: { l: 'Тусгай баг', c: '#9085e9', hex: 0x9085e9 },
+  sa: { l: 'Тусгай хяналт', c: '#d55181', hex: 0xd55181 },
+  oth: { l: 'Өөр салбар', c: '#8a96a8', hex: 0x8a96a8 }
+};
+const RGO = ['own', 'colU', 'colD', 'spec', 'sa', 'oth'];
+function respTot(e) {
+  const g = {}; let n = 0, b = 0;
+  for (const k of RGO) { const x = [0, 0]; for (const t in (e.resp[k] || {})) { x[0] += e.resp[k][t][0]; x[1] += e.resp[k][t][1]; } g[k] = x; n += x[0]; b += x[1]; }
+  return { g, n, b };
+}
+const STF = [['dir', 'Захирал', '#f5c542', 0xf5c542, true], ['sr', 'Ахлах ажилтан', '#7dd3fc', 0x7dd3fc], ['lo', 'Зээлийн ажилтан', '#3987e5', 0x3987e5], ['svc', 'Үйлчилгээ', '#9aa7b8', 0x9aa7b8], ['oth', 'Бусад', '#6b7a90', 0x6b7a90]];
+const MVT = [['Шинээр хэтэрсэн', '0 → 1+ хоног'], ['30+ руу шилжсэн', '≤30 → 31+'], ['NPL-д орсон', '≤90 → 91+'], ['Хэвийн болсон', '1+ → 0']];
+const CT = { 1: ['Шинээр хэтэрсэн', '#fab219'], 2: ['30+ руу', '#ec835a'], 3: ['NPL-д орсон', '#d03b3b'] };
+const fS = v => v >= 1e9 ? (v / 1e9).toFixed(1) + ' тэр' : (v / 1e6).toFixed(v >= 1e8 ? 0 : 1) + ' сая';
+const hexOf = c => parseInt(c.slice(1), 16);
+function modelNote(e) {
+  if (e.seg === 'on') return 'Орон нутгийн салбар: зээлийн ажилтан олголт <b>болон</b> хугацаа хэтэрсэн зээлийн төлүүлэлтийг хамт хариуцна.';
+  if (e.seg === 'dig') return 'Дижитал салбар: хэтэрсэн зээл Төлүүлэлтийн төвийн <b>дижитал</b> багуудад хуваарилагдана.';
+  if (e.seg === 'ub' || e.ubAgg) return 'Хотын салбар: хугацаа хэтэрсэн зээл Төлүүлэлтийн төвийн багуудад хэтрэлтийн хоногоор (1–30 · 31–90 · 90+) шилжинэ; салбар өөрөө зөвхөн өөрийн зээлийн нэг хэсгийг хариуцна.';
+  return '';
+}
+
+// ── 3D тавцангийн тодорхойлолт
+function holoSpec(e) {
+  const rt = respTot(e), w7 = e.mvS(7)[0][0];
+  const sats = ['colU', 'colD', 'spec', 'sa', 'oth'].map(g => {
+    let staff = g === 'sa' ? e.saStaff : 0;
+    if (g !== 'sa' && g !== 'oth') for (const t in (e.resp[g] || {})) staff += (BP.hub.col[t] || {}).staff || 0;
+    const x = rt.g[g];
+    return { label: RG[g].l, color: RG[g].hex, css: RG[g].c, n: x[0], share: rt.n ? x[0] / rt.n : 0, staff, txt: fN(x[0]) + ' данс · ' + fS(x[1]) };
+  }).filter(s => s.n >= 5 || s.share >= .01);
+  return {
+    title: esc(e.ubAgg ? 'Улаанбаатар · ' + e.agg + ' салбар' : e.short), tint: stc(e.nplP, COLOR.npl.steps)[1],
+    staff: STF.map(s => ({ label: s[1], n: e.staff[s[0]] || 0, css: s[2], color: s[3], big: s[4], cap: e.agg ? 30 : 24 })),
+    towers: e.now.bkB.map((v, i) => ({ label: BK[i], val: v, txt: fS(v), color: hexOf(BKC[i]) })),
+    drops: w7, dropsTxt: '7 хоногт шинээр хэтэрсэн: ' + fN(w7) + ' данс',
+    sats, ownLoop: e.seg === 'on', loopTxt: '⟳ Зээлийн ажилтан: олголт + төлүүлэлт хамт · ' + fN(rt.g.own[0]) + ' хэтэрсэн данс'
+  };
+}
+function hubSpec(h) {
+  if (h === 'col') {
+    const T = Object.entries(BP.hub.col), byG = g => T.filter(([, v]) => v.g === g);
+    const sumS = g => sum(byG(g).map(([, v]) => v.staff)), ub = byG('colU').sort((a, b) => a[0].localeCompare(b[0], 'en', { numeric: true }));
+    const dg = byG('colD'), sp = byG('spec');
+    const tw = [...ub.map(([k, v]) => ({ label: k.split(' (')[0], val: v.bal, txt: fN(v.n) + ' данс', color: 0xd95926 })),
+      { label: 'Дижитал', val: sum(dg.map(([, v]) => v.bal)), txt: fN(sum(dg.map(([, v]) => v.n))) + ' данс', color: 0x199e70 },
+      { label: 'Тусгай баг', val: sum(sp.map(([, v]) => v.bal)), txt: fN(sum(sp.map(([, v]) => v.n))) + ' данс', color: 0x9085e9 }];
+    return { title: 'Төлүүлэлтийн төв', tint: '#d95926', towers: tw, drops: 0, sats: [],
+      staff: [{ label: 'Уламжлалт баг', n: sumS('colU'), css: RG.colU.c, color: RG.colU.hex, cap: 14 }, { label: 'Дижитал баг', n: sumS('colD'), css: RG.colD.c, color: RG.colD.hex, cap: 14 }, { label: 'Тусгай баг', n: sumS('spec'), css: RG.spec.c, color: RG.spec.hex, cap: 12 }] };
+  }
+  const L = ALL.map(b => [b.short, respTot(b).g.sa]).filter(x => x[1][0] > 0).sort((a, b) => b[1][1] - a[1][1]).slice(0, 6);
+  return { title: 'Тусгай хяналтын баг', tint: '#d55181', drops: 0, sats: [],
+    staff: [{ label: 'Хяналтын ажилтан', n: BP.hub.sa.staff, css: RG.sa.c, color: RG.sa.hex }],
+    towers: L.map(([n, x]) => ({ label: n, val: x[1], txt: fS(x[1]), color: RG.sa.hex })) };
+}
+function showHolo(e) {
+  dimMap(true);
+  const go = () => window.Holo.show(e.hub ? hubSpec(e.hub) : holoSpec(e), e.pos ? () => map.project(e.pos) : null);
+  if (window.Holo) go(); else addEventListener('holo-ready', go, { once: true });
+}
+function dimMap(on) {
+  for (const l of ['bigExt', 'detExt']) if (map.getLayer(l)) map.setPaintProperty(l, 'fill-extrusion-opacity', on ? .28 : .93);
+  LBL.style.opacity = on ? .35 : 1;
+}
+const HUBS = [{ hub: 'col', no: -1, short: 'Төлүүлэлтийн төв', name: 'Төлүүлэлтийн төв' }, { hub: 'sa', no: -2, short: 'Тусгай хяналт', name: 'Тусгай хяналт' }];
+
+// ── баруун самбар
+let order = [];
+function renderPanel(e) {
+  if (e.hub) return renderHub(e);
+  const P = $('#pb'), segA = e.seg ? SEGAVG[e.seg] : null;
+  $('#pg').textContent = e.total ? (S.segF === 'all' ? 'Компанийн нийт' : 'Сегмент') : e.ubAgg ? 'Улаанбаатар хот · нэгтгэл' : (e.grp || '') + (e.no ? ' · #' + e.no : '');
+  $('#pt').textContent = e.total ? e.name : e.ubAgg ? 'Улаанбаатар' : e.short;
+  const vis = visible(ALL), rk = (f, asc) => { const a = [...vis].sort((x, y) => asc ? f(x) - f(y) : f(y) - f(x)); return a.indexOf(e) + 1; };
+  $('#pm').innerHTML = e.total || e.ubAgg ? `${e.agg} салбар · ${mLong(BP.asof)}-ний байдлаар` :
+    `Үлдэгдлээр <b>#${rk(x => x.bal)}</b> · NPL%-ын бага нь <b>#${rk(x => x.nplP, true)}</b> / ${vis.length}` + (e.pos ? '' : ' · <span style="color:var(--warn)">координатгүй</span>');
+  let h = `<div class="tiles">
+    <div class="tile big" style="animation-delay:.02s"><span>Нийт багцын үлдэгдэл</span>${cu(e.bal, 'm')}<small>30 хоногт <span class="${e.dBal >= 0 ? 'up' : 'dn'}">${sgn(e.dBal, fM)}</span>${e.gr != null ? ` (${sgn(e.gr, v => (100 * v).toFixed(1) + '%')})` : ''}</small></div>
+    <div class="tile" style="animation-delay:.06s"><span>Багц · данс</span>${cu(e.cnt, 'n')}<small>${e.agg ? '~' : ''}${fN(e.now.cust)} харилцагч</small></div>
+    <div class="tile" style="animation-delay:.1s"><span>OVRD (1–90)</span>${cu(e.ovrd, 'm')}<small>${fP(e.ovrdP)} · ${fN(e.ovrdN)} данс</small></div>
+    <div class="tile" style="animation-delay:.14s"><span>NPL (90+)</span>${cu(e.npl, 'm')}<small>${fP(e.nplP)} · ${fN(e.nplN)} данс</small></div>
+    <div class="tile" style="animation-delay:.18s"><span>NPL %</span>${cu(e.nplP, 'p')}<small class="${e.dNplP <= 0 ? 'up' : 'dn'}">${fPP(e.dNplP)} / 30 хоног</small></div>
+  </div>`;
+  // ажилчид
+  const st = e.staff, lo = (st.lo || 0) + (st.sr || 0), tot = sum(Object.values(st)), rt = respTot(e);
+  h += `<div class="sec" style="animation-delay:.16s"><h3>Ажилчид <small>${tot ? 'идэвхтэй ' + tot + ' ажилтан' : 'ажилтан бүртгэлгүй'}</small></h3>
+    <div class="staff">${STF.slice(0, 4).map(s => `<div><i style="background:${s[2]}"></i><b>${fN(st[s[0]] || 0)}</b><span>${s[1]}</span></div>`).join('')}</div>
+    ${lo ? `<div style="margin-top:7px;font-size:12px;color:var(--t2)">Зээлийн ажилтан (ахлах орсон) бүрт: <b>${fN(e.cnt / lo)}</b> данс · <b>${fM(e.bal / lo)}</b> · хэтэрсэн <b>${fN(e.odN / lo)}</b> данс</div>` : ''}
+    ${e.saStaff ? `<div style="margin-top:4px;font-size:12px;color:var(--t2)">Тусгай хяналтын <b>${e.saStaff}</b> ажилтан энэ ${e.agg ? 'хүрээний' : 'салбарын'} тусгай хяналтад шилжсэн <b>${fN(rt.g.sa[0])}</b> данс (${fM(rt.g.sa[1])})-ыг хариуцаж байна</div>` : ''}
+    </div>`;
+  // шинээр хэтэрсэн / шилжилт
+  const d1 = e.mvS(1), d7 = e.mvS(7), d30 = e.mvS(30), cell = x => `${fN(x[0])}<small>${x[0] ? fS(x[1]) : '—'}</small>`;
+  h += `<div class="sec" style="animation-delay:.22s"><h3>Хугацаа хэтрэлтийн хөдөлгөөн <small>данс · үлдэгдэл</small></h3>
+    <table class="mv"><tr><th></th><th>${BP.asof.slice(5).replace('-', '.')}</th><th>7 хоног</th><th>30 хоног</th></tr>
+    ${MVT.map((m, i) => `<tr><td>${m[0]}<small>${m[1]}</small></td><td>${cell(d1[i])}</td><td>${cell(d7[i])}</td><td>${cell(d30[i])}</td></tr>`).join('')}</table>
+    <div class="chart" id="cNew" style="margin-top:8px"></div></div>`;
+  // хариуцагч
+  h += `<div class="sec" style="animation-delay:.28s"><h3>Хэтэрсэн зээлийг хэн хариуцаж байна <small>${fN(rt.n)} данс · ${fM(rt.b)}</small></h3>
+    ${modelNote(e) ? `<div class="note">${modelNote(e)}</div>` : ''}
+    <div class="stack">${RGO.map(g => `<i data-w="${rt.n ? 100 * rt.g[g][0] / rt.n : 0}" style="background:${RG[g].c}" title="${RG[g].l}: ${fN(rt.g[g][0])} данс"></i>`).join('')}</div>
+    ${RGO.filter(g => rt.g[g][0] > 0).map(g => {
+      const tm = Object.entries(e.resp[g]).sort((a, b) => a[0].localeCompare(b[0], 'en', { numeric: true }));
+      return `<div class="rg"><div class="rh"><span><i style="background:${RG[g].c}"></i>${RG[g].l}</span><small>${fN(rt.g[g][0])} данс · ${fM(rt.g[g][1])} · ${fP(rt.g[g][0] / rt.n, 0)}</small></div>
+        ${g === 'own' || g === 'sa' ? '' : tm.map(([t, v]) => { const sf = (BP.hub.col[t] || {}).staff; return `<div class="tm"><span>${esc(t)} ${sf ? `<em>· ${sf} ажилтан</em>` : ''}</span><span>${fN(v[0])} данс</span><span>${fS(v[1])}</span></div>`; }).join('')}</div>`;
+    }).join('')}</div>`;
+  // анхаарах кейс
+  h += `<div class="sec" style="animation-delay:.34s"><h3>Анхаарах кейс <small>сүүлийн 7 хоногт босго давсан, хамгийн том</small></h3>
+    ${e.cases.length ? e.cases.slice(0, 10).map(c => { const t = CT[c[2]]; return `<div class="case"><span class="ty" style="color:${t[1]};border-color:${t[1]}88">${t[0]}</span>
+      <span class="pn" title="${esc(c[5])}">${esc(c[5])}<small>${c[0]}${c[7] ? ' · ' + esc(c[7]) : ''}${c[6] ? ' · тусгай хяналт' : ''}</small></span>
+      <span class="am">${fM(c[4])}<small>${c[3]} хоног · ${c[1].slice(5).replace('-', '.')}</small></span></div>`; }).join('') : '<div style="color:var(--t3);font-size:12px">7 хоногт босго давсан данс алга.</div>'}</div>`;
+  h += `<div class="sec" style="animation-delay:.4s"><h3>Чанар ${badge(e.nplP, 'npl')}<small></small></h3>
+    <div class="cmp"><div><span>Энэ ${e.total ? 'хүрээ' : 'салбар'}</span><b>${fP(e.nplP)}</b></div>
+    <div><span>${segA && !e.total ? SEGN[e.seg] + ' дундаж' : 'Хот / ОН / Дижитал'}</span><b>${segA && !e.total ? fP(segA.nplP) : ['ub', 'on', 'dig'].map(k => fP(SEGAVG[k].nplP, 0)).join(' · ')}</b></div>
+    <div><span>Компанийн дундаж</span><b>${fP(COMP.nplP)}</b></div></div></div>`;
+  h += `<div class="sec" style="animation-delay:.44s"><h3>Хэтрэлтийн хоногоор <small>үлдэгдлийн бүтэц</small></h3>
+    <div class="stack">${e.now.bkB.map((v, i) => `<i data-w="${e.bal ? 100 * v / e.bal : 0}" style="background:${BKC[i]}" title="${BK[i]}: ${fM(v)}"></i>`).join('')}</div>
+    <table class="bk"><tr><th>Хоног</th><th>Данс</th><th>Үлдэгдэл</th><th>Хувь</th><th>30 хоногт</th></tr>
+    ${e.now.bkB.map((v, i) => { const dv = v - e.prev.bkB[i]; return `<tr class="${i >= 4 ? 'npl' : ''}"><td><i style="background:${BKC[i]}"></i>${BK[i]}</td><td>${fN(e.now.bkN[i])}</td><td>${fM(v)}</td><td>${fP(e.bal ? v / e.bal : 0)}</td><td class="${i === 0 ? (dv >= 0 ? 'up' : 'dn') : (dv <= 0 ? 'up' : 'dn')}">${sgn(dv, fM)}</td></tr>`; }).join('')}
+    </table></div>`;
+  h += `<div class="sec" style="animation-delay:.48s"><h3>NPL %, 13 сар <small>тасархай = компанийн одоогийн түвшин</small></h3><div class="chart" id="cNpl"></div></div>`;
+  h += `<div class="sec" style="animation-delay:.52s"><h3>Үлдэгдэл, 13 сар <small>тэрбум ₮ · сарын эцэс</small></h3><div class="chart" id="cBal"></div></div>`;
+  const pr = e.prod.slice(0, 7), rest = e.prod.slice(7), pmx = Math.max(1, ...pr.map(p => p[4]));
+  h += `<div class="sec" style="animation-delay:.56s"><h3>Бүтээгдэхүүнээр <small>үлдэгдэл · NPL%</small></h3>
+    ${pr.map(p => `<div class="pr"><div class="n" title="${esc(p[1])}">${esc(p[1])}<small>${esc(p[2] || '')}</small></div><div class="v">${fM(p[4])} · <span style="color:${stc(p[4] ? p[5] / p[4] : 0, COLOR.npl.steps)[1]}">${fP(p[4] ? p[5] / p[4] : 0)}</span></div><div class="b"><u data-w="${100 * p[4] / pmx}"></u></div></div>`).join('')}
+    ${rest.length ? `<div class="pr"><div class="n" style="color:var(--t3)">Бусад ${rest.length} бүтээгдэхүүн</div><div class="v">${fM(sum(rest.map(p => p[4])))}</div></div>` : ''}</div>`;
+  h += `<div class="sec" style="animation-delay:.6s"><h3>Олголт, сараар <small>тэрбум ₮ · сүүлийнх нь ${+BP.asof.slice(8)} хоногийнх</small></h3><div class="chart" id="cDisb"></div></div>`;
+  h += `<div class="foot"><b>ДЕМО:</b> салбарын нэр, данс, ажилтан, бүх дүн нь санамсаргүйгээр үүсгэсэн зохиомол өгөгдөл — бодит байгууллагын мэдээлэл биш. Тодорхойлолт: OVRD = 1–90 хоног, NPL = 90-ээс дээш хоног хэтэрсэн үндсэн үлдэгдэл. Үүсгэсэн: ${BP.generated}.</div>`;
+  P.innerHTML = h; P.scrollTop = 0;
+  $('#panel').classList.add('open');
+  countUp(P);
+  requestAnimationFrame(() => requestAnimationFrame(() => P.querySelectorAll('[data-w]').forEach(x => x.style.width = x.dataset.w + '%')));
+  const tl = BP.trend.map(mLab), dl = BP.months.map(mLab), dd = BP.days.map((d, i) => i % 5 === 4 || i === 0 ? d.slice(5).replace('-', '.') : '');
+  barChart($('#cNew'), dd, e.mv.map(m => m[0]), { all: true, color: '#fab219', fmt: v => fN(v), axis: v => fN(v), tipF: i => `<b>${BP.days[i]}</b><div class="r">Шинээр хэтэрсэн <em>${fN(e.mv[i][0])} · ${fS(e.mv[i][1])}</em></div><div class="r">30+ руу <em>${fN(e.mv[i][2])}</em></div><div class="r">NPL-д орсон <em>${fN(e.mv[i][4])}</em></div><div class="r">Хэвийн болсон <em>${fN(e.mv[i][6])}</em></div>` });
+  barChart($('#cBal'), tl, e.tr.map(t => t[1]), { fmt: v => fB(v), axis: v => fB(v), tipF: i => `<b>${BP.trend[i]}</b><div class="r">Үлдэгдэл <em>${fM(e.tr[i][1])}</em></div><div class="r">Данс <em>${fN(e.tr[i][0])}</em></div>` });
+  lineChart($('#cNpl'), tl, e.tr.map(t => t[1] ? t[3] / t[1] : 0), { ref: COMP.nplP, tipF: i => `<b>${BP.trend[i]}</b><div class="r">NPL % <em>${fP(e.tr[i][1] ? e.tr[i][3] / e.tr[i][1] : 0)}</em></div><div class="r">NPL дүн <em>${fM(e.tr[i][3])}</em></div><div class="r">PAR30 % <em>${fP(e.tr[i][1] ? e.tr[i][2] / e.tr[i][1] : 0)}</em></div>` });
+  barChart($('#cDisb'), dl, e.disb.map(t => t[1]), { color: '#1baf7a', fmt: v => fB(v), axis: v => fB(v), tipF: i => `<b>${BP.months[i].slice(0, 7)}</b><div class="r">Олголт <em>${fM(e.disb[i][1])}</em></div><div class="r">Зээлийн тоо <em>${fN(e.disb[i][0])}</em></div>` });
+  order = sortedList();
+}
+function renderHub(e) {
+  const P = $('#pb');
+  $('#pg').textContent = e.hub === 'col' ? 'Төлүүлэлтийн төв' : 'Тусгай хяналтын баг';
+  $('#pt').textContent = e.short;
+  let h = '';
+  if (e.hub === 'col') {
+    const T = Object.entries(BP.hub.col).sort((a, b) => a[1].g.localeCompare(b[1].g) || a[0].localeCompare(b[0], 'en', { numeric: true }));
+    const n = sum(T.map(t => t[1].n)), b = sum(T.map(t => t[1].bal)), sf = sum(T.map(t => t[1].staff)), hr = BP.hub.colStaff || {};
+    $('#pm').innerHTML = `Бүх салбарын хэтэрсэн зээлийг хэтрэлтийн хоног ба төрлөөр хуваарилан төлүүлдэг · ${mLong(BP.asof)}`;
+    h += `<div class="tiles"><div class="tile big"><span>Хариуцаж буй хэтэрсэн багц</span>${cu(b, 'm')}<small>${fN(n)} данс</small></div>
+      <div class="tile"><span>Багт бүртгэлтэй</span>${cu(sf, 'n')}<small>нийт ${fN(sum(Object.values(hr)))} ажилтан</small></div></div>`;
+    h += `<div class="sec"><h3>Багууд <small>хэтрэлтийн хоногоор</small></h3><div class="note">Хотын зээл хэтрэлтийн хоногоор <b>1–30 · 31–90 · 90+</b> гэсэн багуудад, дижитал зээл хоёр дижитал багт, тусгай тохиолдол тусгай баг болон хууль/шүүхийн багт хуваарилагдана. Орон нутгийн зээлийг салбар өөрөө хариуцна.</div>
+      <table class="mv"><tr><th>Баг</th><th>Ажилтан</th><th>Данс</th><th>Үлдэгдэл</th><th>Ажилтан бүрт</th></tr>
+      ${T.map(([k, v]) => `<tr><td><i style="display:inline-block;width:9px;height:9px;border-radius:2px;margin-right:6px;background:${RG[v.g].c}"></i>${esc(k)}</td><td>${v.staff || '—'}</td><td>${fN(v.n)}</td><td>${fS(v.bal)}</td><td>${v.staff ? fN(v.n / v.staff) + ' данс' : '—'}</td></tr>`).join('')}</table></div>`;
+  } else {
+    const L = ALL.map(x => [x, respTot(x).g.sa]).filter(x => x[1][0] > 0).sort((a, b) => b[1][1] - a[1][1]);
+    $('#pm').innerHTML = `тусгай хяналтад шилжсэн зээлүүд · ${mLong(BP.asof)}`;
+    h += `<div class="tiles"><div class="tile big"><span>Тусгай хяналтын багц</span>${cu(BP.hub.sa.bal, 'm')}<small>${fN(BP.hub.sa.n)} хэтэрсэн данс</small></div>
+      <div class="tile"><span>Хяналтын ажилтан</span>${cu(BP.hub.sa.staff, 'n')}<small>хариуцагч</small></div></div>`;
+    h += `<div class="sec"><h3>Салбараар <small>тусгай хяналтад шилжсэн</small></h3><table class="mv"><tr><th>Салбар</th><th>Данс</th><th>Үлдэгдэл</th><th>Хяналтын ажилтан</th></tr>
+      ${L.map(([x, v]) => `<tr><td>${esc(x.short)}</td><td>${fN(v[0])}</td><td>${fS(v[1])}</td><td>${x.saStaff || '—'}</td></tr>`).join('')}</table></div>`;
+  }
+  P.innerHTML = h; P.scrollTop = 0; $('#panel').classList.add('open'); countUp(P);
+}
+
+// ── зүүн жагсаалт
+const SORTS = { bal: ['Үлдэгдлээр', e => -e.bal], npl: ['NPL% ихээс', e => -e.nplP], ovrd: ['OVRD% ихээс', e => -e.ovrdP], newod: ['7 хоногт шинээр хэтэрсэн', e => -e.mvS(7)[0][0]], gr: ['Өсөлтөөр', e => -(e.gr ?? -9)], name: ['Нэрээр', null] };
+function sortedList() {
+  const v = visible(ALL), f = SORTS[S.sort][1];
+  return f ? v.sort((a, b) => f(a) - f(b)) : v.sort((a, b) => a.short.localeCompare(b.short, 'mn'));
+}
+function renderList() {
+  const L = sortedList(), mx = Math.max(...L.map(e => e.bal)), on = L.filter(e => MAPPED.includes(e)), off = L.filter(e => !MAPPED.includes(e));
+  const val = e => S.sort === 'npl' ? fP(e.nplP) : S.sort === 'ovrd' ? fP(e.ovrdP) : S.sort === 'newod' ? fN(e.mvS(7)[0][0]) + ' данс' : S.sort === 'gr' ? (e.gr == null ? '—' : sgn(e.gr, v => (100 * v).toFixed(1) + '%')) : fB(e.bal) + ' тэр';
+  const row = e => `<div class="row ${S.sel === e.no ? 'on' : ''} ${MAPPED.includes(e) ? '' : 'nl'}" data-no="${e.no}"><i style="background:${colorOf(e)}"></i><span class="nm">${esc(e.short)}</span><span class="v">${val(e)}</span><span class="bar"><u style="width:${100 * e.bal / mx}%"></u></span></div>`;
+  const hub = h => `<div class="row hubrow ${S.hub === h.hub ? 'on' : ''}" data-hub="${h.hub}"><i style="background:${h.hub === 'col' ? RG.colU.c : RG.sa.c}"></i><span class="nm">${h.short}</span><span class="v">${h.hub === 'col' ? fN(sum(Object.values(BP.hub.col).map(v => v.staff))) : BP.hub.sa.staff} ажилтан</span></div>`;
+  $('#rows').innerHTML = on.map(row).join('') + (off.length ? `<div class="lsub">Газрын зураггүй (координатгүй / дотоод нэгж)</div>` + off.map(row).join('') : '')
+    + `<div class="lsub">Төлүүлэлт ба тусгай хяналт</div>` + HUBS.map(hub).join('');
+  order = L;
+}
+$('#rows').addEventListener('click', ev => {
+  const r = ev.target.closest('.row'); if (!r) return;
+  if (r.dataset.hub) { const h = HUBS.find(x => x.hub === r.dataset.hub); select(h, false); return; }
+  select(ALL.find(b => b.no === +r.dataset.no), true);
+});
+$('#sortS').innerHTML = Object.entries(SORTS).map(([k, v]) => `<option value="${k}">${v[0]}</option>`).join('');
+$('#sortS').onchange = ev => { S.sort = ev.target.value; renderList(); };
+
+function renderKpis() {
+  const t = TOTAL();
+  $('#kpis').innerHTML = `
+    <div class="kpi"><span>${esc(t.name)}</span>${cu(t.bal, 'm')}<small class="${t.dBal >= 0 ? 'up' : 'dn'}">${sgn(t.dBal, fM)} / 30 хоног</small></div>
+    <div class="kpi"><span>Багц · данс</span>${cu(t.cnt, 'n')}<small>${t.agg} салбар</small></div>
+    <div class="kpi"><span>OVRD (1–90)</span>${cu(t.ovrd, 'm')}<small>${fP(t.ovrdP)} · ${fN(t.ovrdN)} данс</small></div>
+    <div class="kpi"><span>NPL (90+)</span>${cu(t.npl, 'm')}<small class="${t.dNplP <= 0 ? 'up' : 'dn'}">${fP(t.nplP)} · ${fPP(t.dNplP)}</small></div>
+    <div class="kpi"><span>7 хоногт шинээр хэтэрсэн</span>${cu(t.mvS(7)[0][0], 'n')}<small>${fM(t.mvS(7)[0][1])}</small></div>`;
+  countUp($('#kpis'));
+  $('#kpis').onclick = () => { select(TOTAL(), false); };
+  $('#kpis').style.cursor = 'pointer'; $('#kpis').title = 'Нийт багцын дэлгэрэнгүй';
+}
+function renderLegend() {
+  const c = COLOR[S.c];
+  $('#legend').innerHTML = `<div class="lt">Өнгө: ${c.l}</div>${c.steps.map(s => `<div class="li"><i style="background:${s[1]}"></i>${s[2]}</div>`).join('')}
+    <div class="note">Баганын өндөр: ${HM[S.h].l} (√ масштаб). ${S.c === 'gr' ? c.note + BP.prev + ' → ' + BP.asof : c.note}.</div>`;
+}
+
+// ── удирдлага
+function segBtns(el, opts, key, on) {
+  el.innerHTML = Object.entries(opts).map(([k, l]) => `<button type="button" data-k="${k}" class="${S[key] === k ? 'on' : ''}">${l}</button>`).join('');
+  el.onclick = ev => { const b = ev.target.closest('button'); if (!b) return; S[key] = b.dataset.k; el.querySelectorAll('button').forEach(x => x.classList.toggle('on', x === b)); on(); };
+}
+segBtns($('#segF'), SEGN, 'segF', () => { if (S.sel != null && !visible(ALL).some(b => b.no === S.sel)) select(null); refresh(); if ($('#panel').classList.contains('open') && S.sel == null) select(TOTAL(), false); });
+segBtns($('#hF'), { bal: 'Үлдэгдэл', npl: 'NPL дүн', cnt: 'Данс', disb: 'Олголт' }, 'h', () => refresh());
+segBtns($('#cF'), { npl: 'NPL %', par: 'PAR30 %', gr: 'Өсөлт' }, 'c', () => refresh(false));
+$('#orbit').onclick = () => { S.orbit = !S.orbit; $('#orbit').classList.toggle('on', S.orbit); };
+$('#satB').onclick = () => setSat(!S.sat);
+$('#home').onclick = home;
+$('#closeB').onclick = () => select(null);
+const step = d => { const L = order; const cur = L.findIndex(e => e.no === S.sel); const n = L[(cur + d + L.length) % L.length]; if (n) select(n, true); };
+$('#prevB').onclick = () => step(-1); $('#nextB').onclick = () => step(1);
+
+// хайлт
+const q = $('#q'), res = $('#results');
+let hits = [], hi = 0;
+function search() {
+  const s = q.value.trim().toLowerCase();
+  if (!s) { res.hidden = true; return; }
+  hits = ALL.filter(e => e.short.toLowerCase().includes(s) || e.name.toLowerCase().includes(s) || String(e.no).includes(s)).slice(0, 10); hi = 0;
+  res.innerHTML = hits.length ? hits.map((e, i) => `<button type="button" class="${i === hi ? 'on' : ''}" data-i="${i}"><span>${esc(e.short)}</span><small>${fB(e.bal)} тэр · NPL ${fP(e.nplP)}</small></button>`).join('') : '<div style="padding:8px;color:var(--t3)">Олдсонгүй</div>';
+  res.hidden = false;
+}
+q.addEventListener('input', search);
+q.addEventListener('keydown', ev => {
+  if (ev.key === 'ArrowDown' || ev.key === 'ArrowUp') { hi = (hi + (ev.key === 'ArrowDown' ? 1 : -1) + hits.length) % Math.max(1, hits.length); res.querySelectorAll('button').forEach((b, i) => b.classList.toggle('on', i === hi)); ev.preventDefault(); }
+  if (ev.key === 'Enter' && hits[hi]) { select(hits[hi], true); q.value = ''; res.hidden = true; q.blur(); }
+  if (ev.key === 'Escape') { q.value = ''; res.hidden = true; q.blur(); }
+  ev.stopPropagation();
+});
+res.addEventListener('click', ev => { const b = ev.target.closest('button'); if (b) { select(hits[+b.dataset.i], true); q.value = ''; res.hidden = true; } });
+addEventListener('keydown', ev => {
+  if (ev.target.tagName === 'INPUT' || ev.target.tagName === 'SELECT') return;
+  if (ev.key === '/') { q.focus(); ev.preventDefault(); }
+  else if (ev.key === 'Escape') select(null);
+  else if (ev.key === 'ArrowRight' && S.sel != null) step(1);
+  else if (ev.key === 'ArrowLeft' && S.sel != null) step(-1);
+  else if (ev.key === ' ') { $('#orbit').click(); ev.preventDefault(); }
+  else if (ev.key === 'r' || ev.key === 'R') home();
+});
+
+// ── эхлэл
+$('#asof').textContent = mLong(BP.asof) + '-ний байдлаар · ' + ALL.length + ' салбар';
+// 'load' нь анхны tile-уудыг хүлээдэг тул tile сервер хариу өгөхгүй бол 5 секундын дараа style бэлэн бол шууд эхлүүлнэ
+let started = false;
+setTimeout(() => { if (!started && map.style && map.style._loaded) { S.noDem = S.noDem || TERR.dem + TERR.demH > 0; start(); } }, 5000);
+map.on('load', () => start());
+const intro = () => map.flyTo({ center: [103.2, 46.4], zoom: innerWidth < 700 ? 3.6 : 4.75, pitch: 52, bearing: -12, duration: RM ? 0 : 3400, curve: 1.3, essential: true });
+function start() {
+  if (started) return; started = true;
+  addLayers(); setSat(true);
+  $('#loader').classList.add('done');
+  renderList(); renderKpis(); renderLegend();
+  requestAnimationFrame(loop);
+  intro();
+  // watchdog: tile алдаанаас болж эхлэлийн нислэг тасарвал (камер эхний байрлалдаа) дахин нисгэнэ
+  let wd = 0; const wdT = setInterval(() => { if (++wd > 15 || S.sel != null) return clearInterval(wdT); if (!map.isMoving() && map.getZoom() < 3) intro(); }, 1000);
+  setTimeout(() => { refresh(true); S.ready = true; }, RM ? 0 : 1500);
+  window.__bp3d = { map, S, ALL, select };
+}
+setTimeout(() => { if (!$('#loader').classList.contains('done')) $('#lmsg').textContent = 'Газрын зураг ачаалагдсангүй — Chrome/Edge-ийн сүүлийн хувилбараар (WebGL2) нээнэ үү.'; }, 15000);
+})();
+</script>
+</body>
+</html>
